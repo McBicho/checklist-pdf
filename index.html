@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Generador PDF - Checklist FC-PR-35</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0;
+      margin: 0; padding: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh;
+    }
+    .status-container { text-align: center; padding: 40px; }
+    .status-container h1 { font-size: 22px; margin-bottom: 8px; }
+    .status-container p { color: #94a3b8; font-size: 14px; }
+    .spinner { width: 48px; height: 48px; border: 4px solid #334155; border-top-color: #3b82f6; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 24px auto; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .success { color: #22c55e; } .error { color: #ef4444; }
+    .btn-download { display: inline-block; margin-top: 20px; padding: 12px 28px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; }
+    .btn-download:hover { background: #2563eb; }
+
+    /* ===== FC-PR-35 EXACT FORMAT ===== */
+    #pdf-content {
+      position: absolute; left: -9999px; top: 0; width: 770px;
+      background: white; color: black; font-family: 'Arial', sans-serif; font-size: 9px;
+      padding: 15px 20px; box-sizing: border-box;
+    }
+    #pdf-content table { width: 100%; border-collapse: collapse; margin: 0; }
+    #pdf-content td, #pdf-content th {
+      border: 1px solid #000; padding: 2px 4px; vertical-align: middle; font-size: 8px; line-height: 1.25;
+    }
+    .bg-hdr { background: #c5d9ed; }
+    .bg-light { background: #eef4fb; }
+    .fs7 { font-size: 7px; }
+    .fs8 { font-size: 8px; }
+    .fs9 { font-size: 9px; }
+    .fs10 { font-size: 10px; }
+    .bold { font-weight: bold; }
+    .center { text-align: center; }
+    .left { text-align: left; }
+    .mark-y { color: #16a34a; font-size: 10px; font-weight: bold; }
+    .mark-n { color: #dc2626; font-size: 10px; font-weight: bold; }
+    .conf { color: #16a34a; font-weight: bold; }
+    .nconf { color: #dc2626; font-weight: bold; }
+    .crossed { text-decoration: line-through; color: #888; }
+    .no-border { border: none !important; }
+    .bt-none { border-top: none !important; }
+    .bb-none { border-bottom: none !important; }
+  </style>
+</head>
+<body>
+  <div class="status-container" id="statusUI">
+    <h1>Generando PDF del Checklist</h1>
+    <p>FC-PR-35 — Lista de Chequeo para Recibo de Componentes de Empaque</p>
+    <div class="spinner" id="spinner"></div>
+    <p id="statusMsg">Procesando datos...</p>
+  </div>
+  <div id="pdf-content"></div>
+
+  <script>
+    function getData() {
+      const p = new URLSearchParams(window.location.search).get('data');
+      if (!p) throw new Error('No se recibieron datos. Abre esta página desde Power Apps.');
+      try { return JSON.parse(decodeURIComponent(p)); }
+      catch(e) { throw new Error('Error al leer datos: '+e.message); }
+    }
+
+    function render(d) {
+      const mu = typeof d.muestras==='string' ? JSON.parse(d.muestras) : (d.muestras||[]);
+      const tm = parseInt(d.tamMuestreo)||12;
+      const totalRows = Math.max(tm, mu.length);
+
+      // Helper: get value from string or {Value:...}
+      const gv = v => typeof v==='string' ? v : (v&&v.Value?v.Value:'');
+      const cc = v => { const x=gv(v); return x==='Conforme'?'conf':x==='No Conforme'?'nconf':''; };
+      const ct = v => { const x=gv(v); return x==='Conforme'?'C':x==='No Conforme'?'NC':x; };
+
+      // Si/No marks
+      const mk = v => {
+        if(!v) return {s:'',n:''};
+        const y = v==='Sí'||v==='Si';
+        return { s: y?'<span class="mark-y">✓</span>':'', n: !y?'<span class="mark-n">✓</span>':'' };
+      };
+      const i1=mk(d.item1),i2=mk(d.item2),i3=mk(d.item3),i4=mk(d.item4),i5=mk(d.item5);
+
+      // Sample rows
+      let sRows = '';
+      for(let i=0; i<totalRows; i++){
+        const m = mu[i];
+        if(m){
+          sRows += `<tr>
+            <td class="center fs8" style="height:15px;">${m.Numero_Muestra||m.num||(i+1)}</td>
+            <td class="center fs8 ${cc(m.ColorTextura||m.color)}">${ct(m.ColorTextura||m.color)}</td>
+            <td class="center fs8 ${cc(m.AparienciaExt||m.apExt)}">${ct(m.AparienciaExt||m.apExt)}</td>
+            <td class="center fs8 ${cc(m.AparienciaInt||m.apInt)}">${ct(m.AparienciaInt||m.apInt)}</td>
+            <td class="center fs8 ${cc(m.Poro||m.poro)}">${ct(m.Poro||m.poro)}</td>
+            <td class="center fs8 ${cc(m.Artes||m.artes)}">${ct(m.Artes||m.artes)}</td>
+            <td class="center crossed fs7">—</td>
+            <td class="center crossed fs7">—</td>
+            <td class="center crossed fs7">—</td>
+            <td class="center crossed fs7">—</td>
+          </tr>`;
+        } else {
+          sRows += `<tr>
+            <td class="center" style="height:15px;"></td>
+            <td></td><td></td><td></td><td></td><td></td>
+            <td class="crossed"></td><td class="crossed"></td>
+            <td class="crossed"></td><td class="crossed"></td>
+          </tr>`;
+        }
+      }
+
+      // Non-conformity - always show full form like original
+      const rec = d.rechazo||'';
+      const chkSi = (rec==='Sí'||rec==='Si') ? '☒' : '☐';
+      const chkNo = rec==='No' ? '☒' : '☐';
+
+      document.getElementById('pdf-content').innerHTML = `
+
+      <!-- ========== HEADER ========== -->
+      <table>
+        <tr>
+          <td rowspan="2" class="bg-hdr bold center fs9" style="width:20%;">PLANTA CALLAO SGC</td>
+          <td rowspan="2" class="bg-hdr bold center fs10" style="width:48%;">LISTA DE CHEQUEO PARA EL RECIBO DE<br>COMPONENTES DE EMPAQUE</td>
+          <td class="bg-hdr bold left fs9" style="width:32%; padding-left:6px;">FORMATO<br>FC-PR-35</td>
+        </tr>
+        <tr>
+          <td class="bg-hdr left fs7" style="padding-left:6px;">Rev. 17 /04-10-2024<br>Aprobado Por: Freddy Medina</td>
+        </tr>
+        <tr>
+          <td class="bg-light left fs8" style="padding:3px 8px;" colspan="1">Preparado Por: ${d.preparador||''}</td>
+          <td class="bg-light left fs8" style="padding:3px 8px;" colspan="2">Revisado Por: ${d.revisor||''}</td>
+        </tr>
+      </table>
+
+      <!-- ========== LOT INFO ========== -->
+      <table style="margin-top:8px;">
+        <tr>
+          <td class="bg-light bold center fs8" style="width:10%;">No. Lote:</td>
+          <td class="center fs9 bold" style="width:15%;">${d.lote||''}</td>
+          <td class="bg-light bold center fs8" style="width:10%;">Producto:</td>
+          <td class="center fs9 bold" style="width:15%;">${d.producto||''}</td>
+          <td class="bg-light bold center fs8" style="width:8%;">Fecha:</td>
+          <td class="center fs9" style="width:15%;">${d.fecha||''}</td>
+          <td class="bg-light bold center fs8" style="width:13%;">Tamaño del lote:</td>
+          <td class="center fs9" style="width:14%;">${d.tamLote||''}</td>
+        </tr>
+      </table>
+
+      <!-- ========== ITEMS ========== -->
+      <table style="margin-top:6px;">
+        <tr>
+          <td class="bg-hdr bold center fs8" style="width:58%;">ITEMS</td>
+          <td class="bg-hdr bold center fs8" style="width:5%;">Si</td>
+          <td class="bg-hdr bold center fs8" style="width:5%;">No</td>
+          <td class="bg-hdr bold center fs8" style="width:32%;">Comentarios / Observaciones</td>
+        </tr>
+        <tr>
+          <td class="left fs8">1. Transporte con condiciones apropiadas (¿es seguro para descargar?).</td>
+          <td class="center">${i1.s}</td><td class="center">${i1.n}</td>
+          <td class="left fs8">${d.item1obs||''}</td>
+        </tr>
+        <tr>
+          <td class="left fs8">2. Daños visibles en componentes debido al transporte.</td>
+          <td class="center">${i2.s}</td><td class="center">${i2.n}</td>
+          <td class="left fs8">${d.item2obs||''}</td>
+        </tr>
+        <tr>
+          <td class="left fs8">3. La cantidad en la Guía de entrega es igual a la cantidad entregada.</td>
+          <td class="center">${i3.s}</td><td class="center">${i3.n}</td>
+          <td class="left fs8">${d.item3obs||''}</td>
+        </tr>
+        <tr>
+          <td class="left fs8">4. Cantidad recibida igual a cantidad ordenada.</td>
+          <td class="center">${i4.s}</td><td class="center">${i4.n}</td>
+          <td class="left fs8">${d.item4obs||''}</td>
+        </tr>
+        <tr>
+          <td class="left fs8">5. Certificado de calidad es entregado con los componentes.</td>
+          <td class="center">${i5.s}</td><td class="center">${i5.n}</td>
+          <td class="left fs8">${d.item5obs||''}</td>
+        </tr>
+        <tr>
+          <td class="left fs8">6. Cantidad de unidades de empaque inspeccionadas.</td>
+          <td class="center bold" colspan="2">${d.item6||''}</td>
+          <td class="left fs8">${d.item6obs||''}</td>
+        </tr>
+      </table>
+
+      <!-- ========== SECTION 7 ========== -->
+      <table style="margin-top:0;">
+        <tr>
+          <td class="left bold fs8" colspan="10" style="padding:3px 5px;">7. Los componentes cumplen los requerimientos de:</td>
+        </tr>
+        <tr>
+          <td class="bg-hdr bold center fs8" colspan="10">Características Verificadas</td>
+        </tr>
+      </table>
+
+      <!-- ========== SAMPLES TABLE ========== -->
+      <table>
+        <tr>
+          <th rowspan="2" class="bg-hdr center fs7" style="width:7%;">N°<br>muestra</th>
+          <th rowspan="2" class="bg-hdr center fs7" style="width:11%;">Color y<br>Textura<br>(1)</th>
+          <th rowspan="2" class="bg-hdr center fs7" style="width:11%;">Apariencia<br>Exterior<br>(2)</th>
+          <th rowspan="2" class="bg-hdr center fs7" style="width:11%;">Apariencia Interior<br>(3)</th>
+          <th rowspan="2" class="bg-hdr center fs7" style="width:8%;">Poro (4)</th>
+          <th rowspan="2" class="bg-hdr center fs7" style="width:14%;">ARTES (5)<br><br><span class="fs7">Información completa y<br>correcta</span></th>
+          <th colspan="2" class="bg-hdr center fs7 crossed" style="width:14%;"><s>PESO (g)<br>(6)</s></th>
+          <th colspan="2" class="bg-hdr center fs7 crossed" style="width:14%;"><s>DIMENSIONES (mm)<br>(7)</s></th>
+        </tr>
+        <tr>
+          <th class="bg-hdr center fs7 crossed"><s>Rango</s></th>
+          <th class="bg-hdr center fs7 crossed"><s>Valor</s></th>
+          <th class="bg-hdr center fs7 crossed"><s>Rango</s></th>
+          <th class="bg-hdr center fs7 crossed"><s>Valor</s></th>
+        </tr>
+        ${sRows}
+      </table>
+
+      <!-- ========== NOTES ========== -->
+      <div style="margin-top:5px; font-size:6.5px; line-height:1.35; color:#111;">
+        <p style="margin:1px 0;"><b>Notas:</b></p>
+        <p style="margin:1px 0;"><b>(1)</b> Verificar color y textura en baldes/bombonas/botellas/cilindros/etiquetas, que estén de acuerdo con el <u>patrón físico</u> aprobado.</p>
+        <p style="margin:1px 0;"><b>(2)</b> Que estén limpio externamente (baldes/bombonas/botellas/cilindros/etiquetas/cajas simples y corrugadas). Sin abolladuras. <u>Además</u> para las cajas corrugadas verificar que no estén mojadas o con manchas de agua.</p>
+        <p style="margin:1px 0;"><b>(3)</b> En botellas/baldes/bombonas/cilindros: Verificar visualmente la limpieza interior, sin polvo, sin material extraño.</p>
+        <p style="margin:1px 0;"><b>(4)</b> Verificar que las botellas/baldes/bombonas de plástico no tengan poros o cortes en el cuerpo del envase.</p>
+        <p style="margin:1px 0;"><b>(5)</b> Aplica a etiquetas/litografía/cajas simples y corrugadas/láminas en baldes/bombonas/<u>sachets</u>. El texto debe ser claro y <u>de acuerdo al</u> estándar aprobado. La información debe ser completa y correcta <u>de acuerdo al</u> estándar aprobado.</p>
+        <p style="margin:1px 0; padding-left:12px;">Solo para el caso de cilindros, verificar que el nombre del producto en el cuerpo del envase (Volvo y Caterpillar) esté claro, sin pintura choreada, <u>de acuerdo al</u> estándar.</p>
+        <p style="margin:1px 0;"><s><b>(6)</b> & <b>(7)</b> Aplica a las cajas simples y corrugadas.</s> <span style="color:#888;">N/A</span></p>
+      </div>
+
+      <!-- ========== NON-CONFORMITY ========== -->
+      <div style="text-align:center; font-weight:bold; font-size:9px; text-decoration:underline; margin:10px 0 5px 0;">En Caso de Componentes No Conformes</div>
+      <div style="font-size:8px; line-height:1.7; padding:0 5px;">
+        <p style="margin:2px 0;">1. &nbsp;Se rechaza todo el lote: &nbsp;&nbsp; <u>SI</u> ${chkSi} &nbsp;&nbsp;&nbsp; NO ${chkNo} &nbsp;&nbsp;&nbsp; <span style="font-size:7px;">(si marcó No, continuar en 2)</span></p>
+        <p style="margin:2px 0;">2. &nbsp;Todo el lote debe ser revisado en la planta:</p>
+        <p style="margin:2px 0; padding-left:20px;">Cantidad aceptada: <span style="min-width:80px; display:inline-block; border-bottom:1px solid #000;">&nbsp;${d.cantAcep||''}&nbsp;</span> &nbsp;&nbsp;&nbsp;&nbsp; Cantidad rechazada: <span style="min-width:80px; display:inline-block; border-bottom:1px solid #000;">&nbsp;${d.cantRech||''}&nbsp;</span></p>
+        <p style="margin:2px 0; padding-left:20px;">Comentarios de la revisión:</p>
+        <p style="margin:2px 0; padding-left:20px;">${d.comentNC||'.....................................................................................................................'}</p>
+      </div>
+
+      <!-- ========== SIGNATURES ========== -->
+      <div style="margin-top:18px; padding-top:10px; border-top:1px dotted #666;">
+        <table style="border:none;">
+          <tr>
+            <td style="border:none; width:45%; padding:4px 8px; font-size:8px; vertical-align:top;">
+              Inspección realizada por:
+              <div style="border-bottom:1px solid #000; min-height:22px; margin-top:8px;"></div>
+              <div style="margin-top:3px; font-size:7.5px;">${d.inspector||''}</div>
+            </td>
+            <td style="border:none; width:10%;"></td>
+            <td style="border:none; width:45%; padding:4px 8px; font-size:8px; vertical-align:top;">
+              Aprobado por: <span style="font-size:6.5px;">(solo por el caso de no-conformidad)</span>
+              <div style="border-bottom:1px solid #000; min-height:22px; margin-top:8px;"></div>
+              <div style="margin-top:3px; font-size:7.5px;">${d.aprobador||''}</div>
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- ========== FOOTER ========== -->
+      <div style="text-align:center; font-size:6.5px; color:#555; margin-top:8px; border-top:1px solid #ccc; padding-top:3px;">FC-PR-35 (Rev 17 /04-10-2024)</div>
+      `;
+    }
+
+    async function genPDF(d) {
+      const fn = `CHK_${(d.producto||'X').replace(/[\s\.]+/g,'-')}_${(d.lote||'X').replace(/[\s\.]+/g,'-')}_${(d.fecha||'').replace(/\//g,'')}.pdf`;
+      const el = document.getElementById('pdf-content');
+      el.style.left='0'; el.style.position='relative';
+      await html2pdf().set({
+        margin:[8,8,8,8], filename:fn,
+        image:{type:'jpeg',quality:0.98},
+        html2canvas:{scale:2,useCORS:true,letterRendering:true,width:770},
+        jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
+        pagebreak:{mode:['avoid-all','css','legacy']}
+      }).from(el).save();
+      el.style.left='-9999px'; el.style.position='absolute';
+      return fn;
+    }
+
+    async function main() {
+      const msg=document.getElementById('statusMsg'), sp=document.getElementById('spinner');
+      try {
+        msg.textContent='Leyendo datos...';
+        const d=getData();
+        msg.textContent='Generando formato FC-PR-35...';
+        render(d);
+        await new Promise(r=>setTimeout(r,500));
+        msg.textContent='Convirtiendo a PDF...';
+        const fn=await genPDF(d);
+        sp.style.display='none';
+        msg.innerHTML=`<span class="success">✓ PDF generado</span><br><br>
+          <span style="color:#94a3b8;font-size:13px;"><strong>${fn}</strong></span><br>
+          <span style="color:#94a3b8;font-size:12px;">Descargado automáticamente. Súbelo a Checklists_PDF en SharePoint.</span>`;
+        const b=document.createElement('button'); b.className='btn-download';
+        b.textContent='Descargar nuevamente'; b.onclick=()=>genPDF(d);
+        msg.appendChild(document.createElement('br')); msg.appendChild(document.createElement('br'));
+        msg.appendChild(b);
+        const c=document.createElement('button'); c.className='btn-download';
+        c.style.background='#334155'; c.style.marginLeft='12px';
+        c.textContent='Cerrar'; c.onclick=()=>window.close(); msg.appendChild(c);
+      } catch(e) {
+        sp.style.display='none';
+        msg.innerHTML=`<span class="error">✗ ${e.message}</span><br><br><span style="color:#94a3b8;font-size:12px;">Abre desde Power Apps.</span>`;
+      }
+    }
+    window.addEventListener('DOMContentLoaded',main);
+  </script>
+</body>
+</html>
